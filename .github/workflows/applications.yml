@@ -123,13 +123,40 @@ jobs:
     
     - name: Deploy Applications
       run: |
-        # Apply all application manifests
+        # Apply manifests if they exist
+        echo "Checking for application manifests..."
+        
+        # Deploy apps directory if it has YAML files
         if [ -d "apps" ]; then
-          kubectl apply -R -f apps/
+          yaml_files=$(find apps -name "*.yaml" -o -name "*.yml" 2>/dev/null | head -1)
+          if [ -n "$yaml_files" ]; then
+            echo "Deploying apps manifests..."
+            kubectl apply -R -f apps/
+          else
+            echo "No YAML files found in apps/"
+          fi
         fi
         
+        # Deploy k8s directory if it has YAML files
         if [ -d "k8s" ]; then
-          kubectl apply -R -f k8s/
+          yaml_files=$(find k8s -name "*.yaml" -o -name "*.yml" 2>/dev/null | head -1)
+          if [ -n "$yaml_files" ]; then
+            echo "Deploying k8s manifests..."
+            kubectl apply -R -f k8s/
+          else
+            echo "No YAML files found in k8s/"
+          fi
+        fi
+        
+        # Deploy manifests directory if it has YAML files
+        if [ -d "manifests" ]; then
+          yaml_files=$(find manifests -name "*.yaml" -o -name "*.yml" 2>/dev/null | head -1)
+          if [ -n "$yaml_files" ]; then
+            echo "Deploying manifests directory..."
+            kubectl apply -R -f manifests/
+          else
+            echo "No YAML files found in manifests/"
+          fi
         fi
     
     - name: Wait for Deployments
