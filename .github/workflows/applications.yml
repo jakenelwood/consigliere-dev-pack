@@ -98,7 +98,11 @@ jobs:
         # Deploy StackGres Operator
         if ! kubectl get namespace stackgres &>/dev/null; then
           kubectl create namespace stackgres
-          kubectl apply -f https://sgwebapi.io/v1/namespaces/stackgres/operator
+          helm repo add stackgres https://stackgres.io/downloads/stackgres-k8s/stackgres/helm
+          helm install stackgres stackgres/stackgres-operator \
+            --namespace stackgres \
+            --set grafana.autoEmbed=true \
+            --set-string adminui.service.type=ClusterIP
         fi
         
         # Deploy Qdrant
