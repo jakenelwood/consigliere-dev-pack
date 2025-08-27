@@ -87,6 +87,7 @@ jobs:
       env:
         KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
       run: |
+        mkdir -p ~/.kube
         echo "$KUBECONFIG_CONTENT" > ~/.kube/config
         chmod 600 ~/.kube/config
         kubectl config view
