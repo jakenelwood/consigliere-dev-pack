@@ -1,0 +1,53 @@
+# Terraform state files
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Sensitive variable files
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform directory
+.terraform/
+.terraform.lock.hcl
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+
+# Kubeconfig files
+*kubeconfig*
+*.kubeconfig
+
+# Backup files
+*.backup
+*.bak
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+/tmp/
+
+# Credentials and secrets
+*.secret
+*.credentials
+*-credentials.yaml
+*-secret.yaml
+
+# Packer
+packer_cache/
+*.box

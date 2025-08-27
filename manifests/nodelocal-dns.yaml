@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-local-dns
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-local-dns
+rules:
+- apiGroups: [""]
+  resources: ["endpoints", "services", "pods"]
+  verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: node-local-dns
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: node-local-dns
+subjects:
+- kind: ServiceAccount
+  name: node-local-dns
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-local-dns
+  namespace: kube-system
+  labels:
+    k8s-app: node-local-dns
+data:
+  Corefile: |
+    .:53 {
+        errors
+        cache 30
+        reload
+        loop
+        bind 169.254.20.10 127.0.0.1
+        forward . 10.43.0.10 {
+            prefer_udp
+        }
+        prometheus :9253
+        health 169.254.20.10:8080
+        log
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-local-dns
+  namespace: kube-system
+  labels:
+    k8s-app: node-local-dns
+spec:
+  selector:
+    matchLabels:
+      k8s-app: node-local-dns
+  template:
+    metadata:
+      labels:
+        k8s-app: node-local-dns
+    spec:
+      priorityClassName: system-node-critical
+      serviceAccountName: node-local-dns
+      hostNetwork: true
+      dnsPolicy: Default
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: node-cache
+        image: registry.k8s.io/dns/k8s-dns-node-cache:1.22.28
+        args:
+        - -localip
+        - 169.254.20.10,127.0.0.1
+        - -conf
+        - /etc/Corefile
+        - -upstreamsvc
+        - kube-dns
+        ports:
+        - containerPort: 53
+          hostPort: 53
+          protocol: UDP
+        - containerPort: 53
+          hostPort: 53
+          protocol: TCP
+        - containerPort: 9253
+          hostPort: 9253
+          protocol: TCP
+        - containerPort: 8080
+          hostPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc
+          readOnly: true
+        resources:
+          requests:
+            cpu: 25m
+            memory: 5Mi
+      volumes:
+      - name: config-volume
+        configMap:
+          name: node-local-dns
+          items:
+          - key: Corefile
+            path: Corefile

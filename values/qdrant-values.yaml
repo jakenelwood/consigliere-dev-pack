@@ -1,0 +1,24 @@
+persistence:
+  enabled: true
+  storageClassName: hcloud-volumes
+  size: 100Gi
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "2Gi"
+  limits:
+    cpu: "2"
+    memory: "6Gi"
+
+nodeSelector:
+  workload: "app"
+
+tolerations: []
+
+service:
+  type: ClusterIP
+
+env:
+  - name: QDRANT__STORAGE__ON_DISK
+    value: "true"
