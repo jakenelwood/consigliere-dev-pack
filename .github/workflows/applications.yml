@@ -108,7 +108,8 @@ jobs:
         # Deploy Qdrant
         if ! kubectl get namespace qdrant &>/dev/null; then
           kubectl create namespace qdrant
-          helm repo add qdrant https://qdrant.github.io/helm-charts
+          helm repo add qdrant https://qdrant.github.io/qdrant-helm
+          helm repo update
           helm upgrade --install qdrant qdrant/qdrant \
             --namespace qdrant \
             --create-namespace \
