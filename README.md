@@ -1,5 +1,9 @@
 # AI Consigliere — Inner-loop HA Dev (Ashburn)
 
+![Application Deployment](https://github.com/jakenelwood/consigliere-dev-pack/actions/workflows/applications.yml/badge.svg)
+![Security Scanning](https://github.com/jakenelwood/consigliere-dev-pack/actions/workflows/security.yml/badge.svg)
+![Test Connection](https://github.com/jakenelwood/consigliere-dev-pack/actions/workflows/test-connection.yml/badge.svg)
+
 This stands up an HA k3s control plane in Ashburn with a single **CCX33** agent for a snappy dev feel, fronted by a **Hetzner LB11** running **ingress‑nginx**. Control planes remain tainted so app pods don't land there (prod‑like scheduling).
 
 ## Prereqs
