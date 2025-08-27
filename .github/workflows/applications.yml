@@ -67,9 +67,7 @@ jobs:
     needs: validate-manifests
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment:
-      name: production
-      
+    
     steps:
     - uses: actions/checkout@v4
     
