@@ -193,7 +193,7 @@ jobs:
               for file in $yaml_files; do
                 echo "  Applying: $file"
                 if kubectl apply -f "$file"; then
-                  ((deployment_count++))
+                  deployment_count=$((deployment_count + 1))
                 else
                   echo "  Warning: Failed to apply $file"
                 fi
@@ -228,7 +228,7 @@ jobs:
             for file in $yaml_files; do
               echo "  Applying: $file"
               if kubectl apply -f "$file"; then
-                ((deployment_count++))
+                deployment_count=$((deployment_count + 1))
               fi
             done
           fi
