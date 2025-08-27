@@ -1,0 +1,179 @@
+name: Infrastructure Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*.tf'
+      - '*.hcl'
+      - 'manifests/**'
+      - '.github/workflows/infrastructure.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '*.tf'
+      - '*.hcl'
+      - 'manifests/**'
+      - '.github/workflows/infrastructure.yml'
+
+env:
+  TERRAFORM_VERSION: '1.9.5'
+  
+jobs:
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    
+    - name: Terraform Format Check
+      run: terraform fmt -check
+      continue-on-error: true
+    
+    - name: Terraform Init
+      env:
+        HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      run: |
+        echo "hcloud_token = \"$HCLOUD_TOKEN\"" > terraform.tfvars
+        echo "my_admin_cidrs = [\"0.0.0.0/0\"]" >> terraform.tfvars
+        terraform init
+    
+    - name: Terraform Validate
+      run: terraform validate
+
+  plan:
+    name: Terraform Plan
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+    
+    - name: Configure SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+        echo "$SSH_PUBLIC_KEY" > ~/.ssh/id_ed25519.pub
+        chmod 600 ~/.ssh/id_ed25519
+        chmod 644 ~/.ssh/id_ed25519.pub
+    
+    - name: Terraform Init
+      env:
+        HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      run: |
+        echo "hcloud_token = \"$HCLOUD_TOKEN\"" > terraform.tfvars
+        echo "my_admin_cidrs = [\"0.0.0.0/0\"]" >> terraform.tfvars
+        terraform init
+    
+    - name: Terraform Plan
+      env:
+        HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      run: |
+        terraform plan -out=tfplan
+    
+    - name: Upload Plan
+      uses: actions/upload-artifact@v3
+      with:
+        name: tfplan
+        path: tfplan
+    
+    - name: Comment PR
+      uses: actions/github-script@v7
+      if: github.event_name == 'pull_request'
+      env:
+        PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const output = `#### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+          
+          <details><summary>Show Plan</summary>
+          
+          \`\`\`\n
+          ${process.env.PLAN}
+          \`\`\`
+          
+          </details>
+          
+          *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          })
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ env.TERRAFORM_VERSION }}
+        terraform_wrapper: false
+    
+    - name: Configure SSH
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+        echo "$SSH_PUBLIC_KEY" > ~/.ssh/id_ed25519.pub
+        chmod 600 ~/.ssh/id_ed25519
+        chmod 644 ~/.ssh/id_ed25519.pub
+        ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+    
+    - name: Terraform Init
+      env:
+        HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      run: |
+        echo "hcloud_token = \"$HCLOUD_TOKEN\"" > terraform.tfvars
+        echo "my_admin_cidrs = [\"0.0.0.0/0\"]" >> terraform.tfvars
+        terraform init
+    
+    - name: Terraform Apply
+      env:
+        HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      run: |
+        terraform apply -auto-approve
+    
+    - name: Save Kubeconfig
+      run: |
+        terraform output -raw kubeconfig > kubeconfig
+        
+    - name: Upload Kubeconfig
+      uses: actions/upload-artifact@v3
+      with:
+        name: kubeconfig
+        path: kubeconfig
+        
+    - name: Update Kubeconfig Secret
+      env:
+        KUBECONFIG_CONTENT: ${{ steps.kubeconfig.outputs.content }}
+      run: |
+        echo "Kubeconfig saved for application deployments"

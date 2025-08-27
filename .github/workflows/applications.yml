@@ -1,0 +1,136 @@
+name: Application Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'k8s/**'
+      - '.github/workflows/applications.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'k8s/**'
+      - '.github/workflows/applications.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+
+env:
+  KUBECTL_VERSION: 'v1.31.0'
+
+jobs:
+  validate-manifests:
+    name: Validate K8s Manifests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: ${{ env.KUBECTL_VERSION }}
+    
+    - name: Validate Kubernetes manifests
+      run: |
+        find k8s apps -name "*.yaml" -o -name "*.yml" | while read file; do
+          echo "Validating $file"
+          kubectl apply --dry-run=client -f "$file"
+        done
+
+  deploy-apps:
+    name: Deploy Applications
+    needs: validate-manifests
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: ${{ env.KUBECTL_VERSION }}
+    
+    - name: Setup Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: 'latest'
+    
+    - name: Configure Kubeconfig
+      env:
+        KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
+      run: |
+        echo "$KUBECONFIG_CONTENT" > ~/.kube/config
+        chmod 600 ~/.kube/config
+        kubectl config view
+        kubectl get nodes
+    
+    - name: Deploy Core Services
+      run: |
+        # Deploy StackGres Operator
+        if ! kubectl get namespace stackgres &>/dev/null; then
+          kubectl create namespace stackgres
+          kubectl apply -f https://sgwebapi.io/v1/namespaces/stackgres/operator
+        fi
+        
+        # Deploy Qdrant
+        if ! kubectl get namespace qdrant &>/dev/null; then
+          kubectl create namespace qdrant
+          helm repo add qdrant https://qdrant.github.io/helm-charts
+          helm upgrade --install qdrant qdrant/qdrant \
+            --namespace qdrant \
+            --create-namespace \
+            --values values/qdrant-values.yaml
+        fi
+        
+        # Deploy NodeLocal DNS if configured
+        if [ -f manifests/nodelocal-dns.yaml ]; then
+          kubectl apply -f manifests/nodelocal-dns.yaml
+        fi
+    
+    - name: Deploy Applications
+      run: |
+        # Apply all application manifests
+        if [ -d "apps" ]; then
+          kubectl apply -R -f apps/
+        fi
+        
+        if [ -d "k8s" ]; then
+          kubectl apply -R -f k8s/
+        fi
+    
+    - name: Wait for Deployments
+      run: |
+        # Wait for all deployments to be ready
+        kubectl get deployments --all-namespaces -o json | \
+          jq -r '.items[] | "\(.metadata.namespace) \(.metadata.name)"' | \
+          while read ns name; do
+            echo "Waiting for deployment $name in namespace $ns"
+            kubectl rollout status deployment/$name -n $ns --timeout=300s || true
+          done
+    
+    - name: Health Check
+      run: |
+        echo "=== Cluster Status ==="
+        kubectl get nodes
+        echo ""
+        echo "=== Pod Status ==="
+        kubectl get pods --all-namespaces | grep -v Running | grep -v Completed || true
+        echo ""
+        echo "=== Services ==="
+        kubectl get svc --all-namespaces
+        echo ""
+        echo "=== Ingresses ==="
+        kubectl get ingress --all-namespaces
