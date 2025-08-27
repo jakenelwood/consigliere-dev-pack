@@ -42,10 +42,24 @@ jobs:
     
     - name: Validate Kubernetes manifests
       run: |
-        # Simple YAML syntax validation since we don't have cluster access
+        # Validate YAML syntax for Kubernetes manifests (supports multi-document files)
+        cat > /tmp/validate_yaml.py << 'EOF'
+        import yaml
+        import sys
+        
+        file_path = sys.argv[1]
+        try:
+            with open(file_path, 'r') as f:
+                docs = list(yaml.safe_load_all(f))
+                print(f"✓ Valid YAML syntax - {len(docs)} document(s)")
+        except yaml.YAMLError as e:
+            print(f"✗ Invalid YAML: {e}")
+            sys.exit(1)
+        EOF
+        
         find k8s apps -name "*.yaml" -o -name "*.yml" | while read file; do
-          echo "Validating syntax of $file"
-          python3 -c "import yaml; yaml.safe_load(open('$file'))" && echo "✓ Valid YAML"
+          echo "Validating: $file"
+          python3 /tmp/validate_yaml.py "$file" || exit 1
         done
 
   deploy-apps:
