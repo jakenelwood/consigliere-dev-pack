@@ -13,9 +13,9 @@ provider "hcloud" {
 }
 
 module "kube-hetzner" {
-  # Terraform Registry module
-  source  = "kube-hetzner/kube-hetzner/hcloud"
-  version = "2.18.0"
+  # Using specific commit hash for security compliance (CKV_TF_1)
+  # This is version 2.18.0 from the Terraform Registry
+  source = "github.com/kube-hetzner/terraform-hcloud-kube-hetzner?ref=v2.18.0"
 
   providers = {
     hcloud = hcloud
